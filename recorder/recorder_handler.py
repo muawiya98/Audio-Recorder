@@ -1,3 +1,4 @@
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from config import STORAGE_PATH
 import sounddevice as sd
 import numpy as np
@@ -7,6 +8,20 @@ import os
 
 
 class RecorderHandler:
+
+    # 🔹 Load ASR model once (class variable)
+    MODEL_ID = "tarteel-ai/whisper-base-ar-quran"
+    MODEL = AutoModelForSpeechSeq2Seq.from_pretrained(MODEL_ID)
+    PROCESSOR = AutoProcessor.from_pretrained(MODEL_ID)
+    MODEL.generation_config.no_timestamps_token_id = (
+        PROCESSOR.tokenizer.convert_tokens_to_ids("<|notimestamps|>")
+    )
+    PIPE = pipeline(
+        "automatic-speech-recognition",
+        model=MODEL,
+        tokenizer=PROCESSOR.tokenizer,
+        feature_extractor=PROCESSOR.feature_extractor,
+    )
 
     def __init__(
         self,
@@ -28,6 +43,26 @@ class RecorderHandler:
     def _callback(self, indata, frames, time, status):
         if self.is_recording and not self.is_paused:
             self.frames.append(indata.copy())
+            # Convert chunk → text asynchronously
+            threading.Thread(
+                target=self.transcribe_chunk, args=(indata.copy(),)
+            ).start()
+
+    def transcribe_chunk(self, chunk):
+        """Convert chunk to text using Hugging Face pipeline"""
+        # Convert float32 PCM → int16 PCM
+        pcm16 = (chunk * 32767).astype(np.int16)
+        # Save chunk as temporary WAV
+        temp_path = self.RECORDINGS_DIR / "temp_chunk.wav"
+        with wave.open(str(temp_path), "wb") as wf:
+            wf.setnchannels(self.channels)
+            wf.setsampwidth(2)
+            wf.setframerate(self.samplerate)
+            wf.writeframes(pcm16.tobytes())
+
+        # Run ASR
+        result = self.PIPE(str(temp_path), return_timestamps=True)
+        print("📝 Chunk text:", result["text"])
 
     def start_recording(self):
         if self.is_recording:
