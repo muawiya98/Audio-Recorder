@@ -62,6 +62,7 @@ class RecorderHandler:
                 model="gpt-4o-mini-transcribe", file=audio_file
             )
 
+
         print("Chunk text:", response.text)
 
     def start_recording(self):
