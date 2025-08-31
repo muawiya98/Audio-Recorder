@@ -1,27 +1,22 @@
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
+from openai import OpenAI
 from config import STORAGE_PATH
 import sounddevice as sd
 import numpy as np
 import threading
+import tempfile
 import wave
 import os
 
 
-class RecorderHandler:
+from dotenv import load_dotenv
+load_dotenv()
 
-    # 🔹 Load ASR model once (class variable)
-    MODEL_ID = "tarteel-ai/whisper-base-ar-quran"
-    MODEL = AutoModelForSpeechSeq2Seq.from_pretrained(MODEL_ID)
-    PROCESSOR = AutoProcessor.from_pretrained(MODEL_ID)
-    MODEL.generation_config.no_timestamps_token_id = (
-        PROCESSOR.tokenizer.convert_tokens_to_ids("<|notimestamps|>")
-    )
-    PIPE = pipeline(
-        "automatic-speech-recognition",
-        model=MODEL,
-        tokenizer=PROCESSOR.tokenizer,
-        feature_extractor=PROCESSOR.feature_extractor,
-    )
+
+class RecorderHandler:
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    # Init OpenAI client
+    client = OpenAI(api_key=api_key)
 
     def __init__(
         self,
@@ -39,30 +34,35 @@ class RecorderHandler:
         self.is_recording = False
         self.is_paused = False
         self.thread = None
+        self.buffer = []
 
     def _callback(self, indata, frames, time, status):
         if self.is_recording and not self.is_paused:
             self.frames.append(indata.copy())
-            # Convert chunk → text asynchronously
-            threading.Thread(
-                target=self.transcribe_chunk, args=(indata.copy(),)
-            ).start()
+            self.buffer.append(indata.copy())
+            if len(self.buffer) * self.chunk_size >= self.samplerate * 5:  # ~5 seconds
+                data = np.concatenate(self.buffer, axis=0)
+                self.buffer = []
+                threading.Thread(target=self.transcribe_chunk, args=(data,)).start()
 
     def transcribe_chunk(self, chunk):
-        """Convert chunk to text using Hugging Face pipeline"""
-        # Convert float32 PCM → int16 PCM
         pcm16 = (chunk * 32767).astype(np.int16)
-        # Save chunk as temporary WAV
-        temp_path = self.RECORDINGS_DIR / "temp_chunk.wav"
-        with wave.open(str(temp_path), "wb") as wf:
-            wf.setnchannels(self.channels)
-            wf.setsampwidth(2)
-            wf.setframerate(self.samplerate)
-            wf.writeframes(pcm16.tobytes())
 
-        # Run ASR
-        result = self.PIPE(str(temp_path), return_timestamps=True)
-        print("📝 Chunk text:", result["text"])
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmpfile:
+            with wave.open(tmpfile.name, "wb") as wf:
+                wf.setnchannels(self.channels)
+                wf.setsampwidth(2)
+                wf.setframerate(self.samplerate)
+                wf.writeframes(pcm16.tobytes())
+            tmp_path = tmpfile.name
+
+        # Transcribe with OpenAI Whisper
+        with open(tmp_path, "rb") as audio_file:
+            response = self.client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe", file=audio_file
+            )
+
+        print("Chunk text:", response.text)
 
     def start_recording(self):
         if self.is_recording:
