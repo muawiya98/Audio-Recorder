@@ -1,5 +1,6 @@
-from openai import OpenAI
+from fetch_audio import fetch_audio
 from config import STORAGE_PATH
+from openai import OpenAI
 import sounddevice as sd
 import numpy as np
 import threading
@@ -61,9 +62,8 @@ class RecorderHandler:
             response = self.client.audio.transcriptions.create(
                 model="gpt-4o-mini-transcribe", file=audio_file
             )
-
-
         print("Chunk text:", response.text)
+        fetch_audio(response.text)
 
     def start_recording(self):
         if self.is_recording:
