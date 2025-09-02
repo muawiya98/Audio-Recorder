@@ -12,6 +12,7 @@ import os
 
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -38,12 +39,14 @@ class RecorderHandler:
         self.is_paused = False
         self.thread = None
         self.buffer = []
+        self.run_stt = True
+        self.transcribe = None
 
     def _callback(self, indata, frames, time, status):
         if self.is_recording and not self.is_paused:
             self.frames.append(indata.copy())
             self.buffer.append(indata.copy())
-            if len(self.buffer) * self.chunk_size >= self.samplerate * 3:  # ~3 seconds
+            if len(self.buffer) * self.chunk_size >= self.samplerate * 5:  # ~5 seconds
                 data = np.concatenate(self.buffer, axis=0)
                 self.buffer = []
                 threading.Thread(target=self.transcribe_chunk, args=(data,)).start()
@@ -60,21 +63,26 @@ class RecorderHandler:
             tmp_path = tmpfile.name
 
         # Transcribe with OpenAI Whisper
-        with open(tmp_path, "rb") as audio_file:
-            response = self.client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe", file=audio_file, language="ar"
-            )
-        print("Chunk text:", response.text)
-        output_file, duration = fetch_audio(response.text)
-        if output_file:
-            # self.pause_recording()
-            playsound(output_file)
-            time.sleep((duration/1000)+0.1)
-            os.remove(output_file)
-            # self.start_recording()
-        else:
-            print("Sentence not found in SRT")
-            
+        if self.run_stt:
+            with open(tmp_path, "rb") as audio_file:
+                response = self.client.audio.transcriptions.create(
+                    model="gpt-4o-mini-transcribe", file=audio_file, language="ar"
+                )
+                self.transcribe = response.text
+                print("Chunk text:", response.text)
+        if self.transcribe:
+            output_file, duration = fetch_audio(self.transcribe)
+            self.transcribe = None
+            if output_file:
+                self.run_stt = False
+                # self.pause_recording()
+                playsound(output_file)
+                time.sleep((duration / 1000) + 0.1)
+                os.remove(output_file)
+                # self.start_recording()
+                self.run_stt = True
+            else:
+                print("Sentence not found in SRT")
 
     def start_recording(self):
         if self.is_recording:
