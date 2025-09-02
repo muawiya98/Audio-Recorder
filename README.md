@@ -97,4 +97,4 @@ All recorded audio files are automatically saved to the `storage/` directory. Th
 - **UI Framework**: Built with Tkinter for native look and feel
 - **Threading**: Non-blocking audio recording with separate thread
 - **File Format**: WAV format for maximum compatibility
-- **Error Handling**: Graceful handling of audio device issues
+- **Error Handling**: Graceful handling of audio device issuesannotated-types==0.7.0

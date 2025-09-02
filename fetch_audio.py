@@ -1,8 +1,19 @@
+from __future__ import annotations
 from difflib import SequenceMatcher
 from config import STORAGE_PATH
 from pydub import AudioSegment
 import pysrt
+import uuid
 import os
+
+# from pydub.utils import which
+
+# AudioSegment.converter = which(
+#     os.path.join("G:", "ffmpeg-8.0-full_build", "bin", "ffmpeg")
+# )
+# AudioSegment.ffprobe = which(
+#     os.path.join("G:", "ffmpeg-8.0-full_build", "bin", "ffprobe")
+# )
 
 
 # ---- Load SRT file ----
@@ -43,11 +54,24 @@ def find_sentence_range(sentence, words):
 
 
 # ---- Extract audio segment ----
-def extract_audio(audio_file, start_ms, end_ms, output_file):
+# def extract_audio(audio_file, start_ms, end_ms, output_file):
+#     audio = AudioSegment.from_file(audio_file)
+#     segment = audio[start_ms:end_ms]
+#     segment.export(output_file, format="mp3")
+#     # print(f"Saved: {output_file}")
+
+
+def extract_audio(audio_file, start_ms, end_ms, output_dir="storage"):
     audio = AudioSegment.from_file(audio_file)
     segment = audio[start_ms:end_ms]
+
+    os.makedirs(output_dir, exist_ok=True)
+    unique_name = f"sentence_{uuid.uuid4().hex}.mp3"
+    output_file = os.path.join(output_dir, unique_name)
+    # print(f"Saved: {output_file}")
+
     segment.export(output_file, format="mp3")
-    print(f"Saved: {output_file}")
+    return output_file
 
 
 _srt_file = "096_words.srt"
@@ -56,13 +80,14 @@ srt_file = os.path.join(STORAGE_PATH, _srt_file)
 audio_file = os.path.join(STORAGE_PATH, _audio_file)
 
 
-def fetch_audio(sentence):
+def fetch_audio(sentence) -> tuple[str, int]:
     words = _load_srt_words(srt_file)
     start, end = find_sentence_range(sentence, words)
     if start is not None:
-        extract_audio(audio_file, start, end, "output_sentence.mp3")
+        output_file = extract_audio(audio_file, start, end, output_dir=STORAGE_PATH)
+        return output_file, end-start
     else:
-        print("Sentence not found in SRT")
+        return None, None
 
 
 # Quran Text Validator & Locator (Embeddings + Alignment)
@@ -79,7 +104,6 @@ def fetch_audio(sentence):
 # - For Arabic normalization, we strip harakat/diacritics, normalize alef/yaa/ta marbuta, remove tatweel.
 # - If embeddings are unavailable, we fallback to a RapidFuzz search.
 
-from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional
 
@@ -499,8 +523,8 @@ def extract_matched_audio(result: MatchResult, output_path: str) -> Optional[str
 """
 
 # Adjust these paths to your files
-SRT_PATH = os.path.join(root_path, "096_words.srt")
-AUDIO_PATH = os.path.join(root_path, "096.mp3")
+SRT_PATH = os.path.join(STORAGE_PATH, "096_words.srt")
+AUDIO_PATH = os.path.join(STORAGE_PATH, "096.mp3")
 
 
 def fetch_wrong_audio(sentence_):
@@ -525,6 +549,6 @@ def fetch_wrong_audio(sentence_):
     fetch_audio(wrong_sentence)
 
 
-# Example user inputs (typos, missing words, etc.)
-user_text = "اقرأ بسم ربك الذذي خلق"  # intentionally wrong (missing ل)
-fetch_wrong_audio(user_text)
+# # Example user inputs (typos, missing words, etc.)
+# user_text = "اقرأ بسم ربك الذذي خلق"  # intentionally wrong (missing ل)
+# fetch_wrong_audio(user_text)

@@ -1,10 +1,12 @@
 from fetch_audio import fetch_audio
 from config import STORAGE_PATH
+from playsound import playsound
 from openai import OpenAI
 import sounddevice as sd
 import numpy as np
 import threading
 import tempfile
+import time
 import wave
 import os
 
@@ -41,7 +43,7 @@ class RecorderHandler:
         if self.is_recording and not self.is_paused:
             self.frames.append(indata.copy())
             self.buffer.append(indata.copy())
-            if len(self.buffer) * self.chunk_size >= self.samplerate * 5:  # ~5 seconds
+            if len(self.buffer) * self.chunk_size >= self.samplerate * 3:  # ~3 seconds
                 data = np.concatenate(self.buffer, axis=0)
                 self.buffer = []
                 threading.Thread(target=self.transcribe_chunk, args=(data,)).start()
@@ -60,10 +62,19 @@ class RecorderHandler:
         # Transcribe with OpenAI Whisper
         with open(tmp_path, "rb") as audio_file:
             response = self.client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe", file=audio_file
+                model="gpt-4o-mini-transcribe", file=audio_file, language="ar"
             )
         print("Chunk text:", response.text)
-        fetch_audio(response.text)
+        output_file, duration = fetch_audio(response.text)
+        if output_file:
+            # self.pause_recording()
+            playsound(output_file)
+            time.sleep((duration/1000)+0.1)
+            os.remove(output_file)
+            # self.start_recording()
+        else:
+            print("Sentence not found in SRT")
+            
 
     def start_recording(self):
         if self.is_recording:
