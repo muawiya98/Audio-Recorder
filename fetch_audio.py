@@ -6,17 +6,7 @@ import pysrt
 import uuid
 import os
 
-# from pydub.utils import which
 
-# AudioSegment.converter = which(
-#     os.path.join("G:", "ffmpeg-8.0-full_build", "bin", "ffmpeg")
-# )
-# AudioSegment.ffprobe = which(
-#     os.path.join("G:", "ffmpeg-8.0-full_build", "bin", "ffprobe")
-# )
-
-
-# ---- Load SRT file ----
 def _load_srt_words(srt_file):
     subs = pysrt.open(srt_file)
     words = []
@@ -28,12 +18,10 @@ def _load_srt_words(srt_file):
     return words
 
 
-# ---- Find sentence range in words ----
 def find_sentence_range(sentence, words):
     sentence_words = sentence.strip().split()
     text_words = [w["word"] for w in words]
 
-    # join into one text for matching
     full_text = " ".join(text_words)
     match = SequenceMatcher(
         None, full_text.lower(), sentence.lower()
@@ -42,7 +30,6 @@ def find_sentence_range(sentence, words):
     if match.size == 0:
         return None, None
 
-    # Approximate match: locate sentence words in sequence
     for i in range(len(words) - len(sentence_words) + 1):
         window = [w["word"].lower() for w in words[i : i + len(sentence_words)]]
         if window == [sw.lower() for sw in sentence_words]:
@@ -53,14 +40,6 @@ def find_sentence_range(sentence, words):
     return None, None
 
 
-# ---- Extract audio segment ----
-# def extract_audio(audio_file, start_ms, end_ms, output_file):
-#     audio = AudioSegment.from_file(audio_file)
-#     segment = audio[start_ms:end_ms]
-#     segment.export(output_file, format="mp3")
-#     # print(f"Saved: {output_file}")
-
-
 def extract_audio(audio_file, start_ms, end_ms, output_dir="storage"):
     audio = AudioSegment.from_file(audio_file)
     segment = audio[start_ms:end_ms]
@@ -68,7 +47,6 @@ def extract_audio(audio_file, start_ms, end_ms, output_dir="storage"):
     os.makedirs(output_dir, exist_ok=True)
     unique_name = f"sentence_{uuid.uuid4().hex}.mp3"
     output_file = os.path.join(output_dir, unique_name)
-    # print(f"Saved: {output_file}")
 
     segment.export(output_file, format="mp3")
     return output_file
@@ -85,24 +63,10 @@ def fetch_audio(sentence) -> tuple[str, int]:
     start, end = find_sentence_range(sentence, words)
     if start is not None:
         output_file = extract_audio(audio_file, start, end, output_dir=STORAGE_PATH)
-        return output_file, end-start
+        return output_file, end - start
     else:
         return None, None
 
-
-# Quran Text Validator & Locator (Embeddings + Alignment)
-# -------------------------------------------------------
-# This module:
-# 1) Loads a word-by-word SRT (Quran) and builds searchable text chunks.
-# 2) Uses sentence embeddings (NLP) to find where a user's text likely belongs.
-# 3) Aligns user words vs reference words to detect exact mistakes (missing/extra/wrong).
-# 4) Returns: status (Correct/Not correct), best matching reference text, and mistake details.
-# 5) (Optional) Can extract the matched audio segment if you pass an audio file path.
-#
-# Notes:
-# - Install deps: pip install "sentence-transformers>=3.0" rapidfuzz pysrt pydub
-# - For Arabic normalization, we strip harakat/diacritics, normalize alef/yaa/ta marbuta, remove tatweel.
-# - If embeddings are unavailable, we fallback to a RapidFuzz search.
 
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional
@@ -111,7 +75,6 @@ import re
 import pysrt
 import numpy as np
 
-# Optional imports (use if installed)
 try:
     from sentence_transformers import SentenceTransformer
     from sentence_transformers.util import cos_sim
@@ -134,9 +97,6 @@ try:
 except Exception:
     _HAS_PYDUB = False
 
-# -------------------------
-# Arabic text normalization
-# -------------------------
 _ARABIC_DIACRITICS = re.compile(
     r"[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]"
 )
@@ -187,9 +147,6 @@ def normalize_ar(text: str) -> str:
     return t
 
 
-# -------------------------
-# SRT parsing
-# -------------------------
 @dataclass
 class WordToken:
     word: str  # raw word (as in SRT)
@@ -214,9 +171,6 @@ def load_srt_words(srt_path: str) -> List[WordToken]:
     return words
 
 
-# -------------------------
-# Chunking & Embeddings
-# -------------------------
 @dataclass
 class TextChunk:
     text: str
@@ -267,9 +221,6 @@ class EmbeddingIndex:
         return np.asarray(emb, dtype=np.float32)
 
 
-# -------------------------
-# Alignment (word-level mistakes)
-# -------------------------
 from difflib import SequenceMatcher
 
 
@@ -317,7 +268,6 @@ def align_words(user_tokens: List[str], ref_tokens: List[str]) -> List[Mistake]:
                     )
                 )
                 ref_pos += 1
-            # if user has extra words beyond r_seg -> insertion (no ref advance)
             for k in range(m, len(u_seg)):
                 mistakes.append(
                     Mistake(
@@ -327,7 +277,6 @@ def align_words(user_tokens: List[str], ref_tokens: List[str]) -> List[Mistake]:
                         correct_word=None,
                     )
                 )
-            # if ref has extra words beyond u_seg -> deletion (advance ref)
             for k in range(m, len(r_seg)):
                 mistakes.append(
                     Mistake(
@@ -339,7 +288,6 @@ def align_words(user_tokens: List[str], ref_tokens: List[str]) -> List[Mistake]:
                 )
                 ref_pos += 1
         elif tag == "delete":
-            # ref has words missed by user
             for k in range(j1, j2):
                 mistakes.append(
                     Mistake(
@@ -351,7 +299,6 @@ def align_words(user_tokens: List[str], ref_tokens: List[str]) -> List[Mistake]:
                 )
                 ref_pos += 1
         elif tag == "insert":
-            # user added words not in ref window (attach to current ref_pos)
             for k in range(i1, i2):
                 mistakes.append(
                     Mistake(
@@ -366,9 +313,6 @@ def align_words(user_tokens: List[str], ref_tokens: List[str]) -> List[Mistake]:
     return mistakes
 
 
-# -------------------------
-# Search over Quran SRT (sura now, whole Quran later)
-# -------------------------
 @dataclass
 class MatchResult:
     status: str  # 'Correct' | 'Not correct'
@@ -383,7 +327,6 @@ class MatchResult:
 
 
 def _similarity_fallback(user_norm: str, chunk_norms: List[str]) -> np.ndarray:
-    """Fallback similarity using RapidFuzz or simple token overlap if ST not available."""
     sims = []
     if _HAS_RF:
         for c in chunk_norms:
@@ -413,12 +356,10 @@ def find_best_chunks(
                 ch.vector = embedder.encode([ch.text_norm])[0]
             chunk_vecs.append(ch.vector)
         chunk_mat = np.vstack(chunk_vecs)
-        # cosine similarity via dot since normalized
         sims = (user_vec @ chunk_mat.T).flatten()
     else:
         sims = _similarity_fallback(user_norm, [c.text_norm for c in chunks])
 
-    # pick top_k indices
     top_idx = np.argsort(-sims)[:top_k].tolist()
     return top_idx
 
@@ -441,17 +382,13 @@ def validate_user_text(
     words = load_srt_words(srt_path)
     chunks = build_chunks(words, chunk_size=chunk_size, stride=stride)
 
-    # Build embedder if available
     embedder = EmbeddingIndex(model_name) if _HAS_ST else None
 
-    # Find candidate chunks
     candidates = find_best_chunks(user_text, chunks, embedder, top_k=top_k)
 
-    # Tokenize
     user_tokens_raw = user_text.strip().split()
     user_tokens_norm = normalize_ar(user_text).split()
 
-    # Score and select the best by alignment-based similarity
     best = None
     best_score = -1.0
     best_alignment: List[Mistake] = []
@@ -460,19 +397,15 @@ def validate_user_text(
         ch = chunks[idx]
         ref_tokens_raw = ch.text.split()
         ref_tokens_norm = ch.text_norm.split()
-        # Align (on normalized tokens for robustness), but store raw for display
         alignment = align_words(user_tokens_norm, ref_tokens_norm)
-        # Compute a simple similarity: fraction of 'equal' vs total excluding insertions
         equal = sum(1 for m in alignment if m.type == "equal")
         subs = sum(1 for m in alignment if m.type == "substitution")
         dels = sum(1 for m in alignment if m.type == "deletion")
-        # ignore insertions in denominator to not over-penalize extras
         denom = max(1, equal + subs + dels)
         score = equal / denom
         if score > best_score:
             best_score = score
             best = ch
-            # Rebuild alignment but with *raw* tokens for reporting while keeping types/positions
             alignment_raw = align_words(user_text.strip().split(), ch.text.split())
             best_alignment = alignment_raw
 
@@ -485,7 +418,6 @@ def validate_user_text(
         else "Not correct"
     )
 
-    # Compute ms range from word indices
     start_ms = words[best.start_idx].start_ms if words else None
     end_ms = words[best.end_idx - 1].end_ms if words else None
 
@@ -502,11 +434,6 @@ def validate_user_text(
     )
 
 
-# -------------------------
-# Optional: extract matched audio
-# -------------------------
-
-
 def extract_matched_audio(result: MatchResult, output_path: str) -> Optional[str]:
     if not _HAS_PYDUB:
         raise RuntimeError("pydub is not installed. pip install pydub")
@@ -518,11 +445,6 @@ def extract_matched_audio(result: MatchResult, output_path: str) -> Optional[str
     return output_path
 
 
-"""
-=============================================================
-"""
-
-# Adjust these paths to your files
 SRT_PATH = os.path.join(STORAGE_PATH, "096_words.srt")
 AUDIO_PATH = os.path.join(STORAGE_PATH, "096.mp3")
 
@@ -537,7 +459,6 @@ def fetch_wrong_audio(sentence_):
         chunk_size=20,
         stride=10,
     )
-    # Print mistakes in a readable way
     wrong_sentence = ""
     for m in result.mistakes:
         if m.type != "equal":
@@ -547,8 +468,3 @@ def fetch_wrong_audio(sentence_):
             wrong_sentence = m.correct_word
     print("wrong_sentence", wrong_sentence)
     fetch_audio(wrong_sentence)
-
-
-# # Example user inputs (typos, missing words, etc.)
-# user_text = "اقرأ بسم ربك الذذي خلق"  # intentionally wrong (missing ل)
-# fetch_wrong_audio(user_text)

@@ -51,9 +51,15 @@ class RecorderHandler:
                 self.buffer = []
                 threading.Thread(target=self.transcribe_chunk, args=(data,)).start()
 
-    def transcribe_chunk(self, chunk):
+    def transcribe_chunk(self, chunk, silence_threshold=50):
         pcm16 = (chunk * 32767).astype(np.int16)
 
+        # Check if chunk is silence
+        rms = np.sqrt(np.mean(pcm16.astype(np.float32) ** 2))
+        if rms < silence_threshold:  # skip if too quiet
+            print("Skipped silent chunk (RMS:", rms, ")")
+            return
+        print("Not silent chunk (RMS:", rms, ")")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmpfile:
             with wave.open(tmpfile.name, "wb") as wf:
                 wf.setnchannels(self.channels)
@@ -66,20 +72,19 @@ class RecorderHandler:
         if self.run_stt:
             with open(tmp_path, "rb") as audio_file:
                 response = self.client.audio.transcriptions.create(
-                    model="gpt-4o-mini-transcribe", file=audio_file, language="ar"
+                    model="gpt-4o-transcribe", file=audio_file, language="ar"
                 )
                 self.transcribe = response.text
                 print("Chunk text:", response.text)
+
         if self.transcribe:
             output_file, duration = fetch_audio(self.transcribe)
             self.transcribe = None
             if output_file:
                 self.run_stt = False
-                # self.pause_recording()
                 playsound(output_file)
-                time.sleep((duration / 1000) + 0.1)
+                time.sleep((duration / 1000) + 0.2)
                 os.remove(output_file)
-                # self.start_recording()
                 self.run_stt = True
             else:
                 print("Sentence not found in SRT")

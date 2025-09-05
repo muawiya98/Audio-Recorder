@@ -1,6 +1,5 @@
 from recorder.recorder_UI import RecorderUI
 import tkinter as tk
-# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 if __name__ == "__main__":
     root = tk.Tk()
