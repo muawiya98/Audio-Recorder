@@ -108,15 +108,12 @@ class RecorderHandler:
 
         if self.transcribe:
             output_file = self.fetch_audio_path(self.transcribe)
-            print(output_file)
             self.transcribe = None
             if output_file:
                 self.run_stt = False
                 playsound(output_file)
                 time.sleep(1)
                 self.run_stt = True
-            else:
-                print("Sentence not found in SRT")
 
     def start_recording(self):
         if self.is_recording:
