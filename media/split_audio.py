@@ -27,7 +27,7 @@ def split_audio_by_srt(
         start_ms = srt_to_ms(sub.start)
         end_ms = srt_to_ms(sub.end)
         chunk = audio[start_ms:end_ms]
-        chunk_filename = os.path.join(output_dir, f"chunk_{i:03d}.wav")
+        chunk_filename = os.path.join(output_dir, f"chunk_{i:03d}.mp3")
         chunk.export(chunk_filename.replace(".wav", ".mp3"), format="mp3")
         key = sub.text.strip()
         metadata[i] = [key, chunk_filename]

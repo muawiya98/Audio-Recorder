@@ -1,5 +1,6 @@
+import enum
+from config import STORAGE_PATH, get_data
 from fetch_audio import fetch_audio
-from config import STORAGE_PATH
 from playsound import playsound
 from openai import OpenAI
 import sounddevice as sd
@@ -41,6 +42,10 @@ class RecorderHandler:
         self.buffer = []
         self.run_stt = True
         self.transcribe = None
+        self.time_counter = 0
+        self.time_stamp = time.time()
+        self.words, self.paths = get_data()
+        self.last_word_index = 0
 
     def _callback(self, indata, frames, time, status):
         if self.is_recording and not self.is_paused:
@@ -51,15 +56,39 @@ class RecorderHandler:
                 self.buffer = []
                 threading.Thread(target=self.transcribe_chunk, args=(data,)).start()
 
+    def fetch_audio_path(self, transcribe):
+        words = transcribe.split()
+        old_index = self.last_word_index
+        for w in words:
+            for ind, word in enumerate(self.words[self.last_word_index :]):
+                if w == word:
+                    old_index = ind
+                    break
+        if old_index == self.last_word_index or old_index < (
+            self.last_word_index + len(words)
+        ):
+            self.last_word_index = old_index
+            return self.paths[old_index]
+        return None
+
     def transcribe_chunk(self, chunk, silence_threshold=50):
         pcm16 = (chunk * 32767).astype(np.int16)
 
         # Check if chunk is silence
+        if self.time_counter > 7:
+            word_path = self.paths[self.last_word_index]
+            playsound(word_path)
+            time.sleep(1)
+            word_path = self.paths[self.last_word_index + 1]
+            playsound(word_path)
+            time.sleep(1)
+            self.time_counter = 0
+            self.time_stamp = time.time()
+
         rms = np.sqrt(np.mean(pcm16.astype(np.float32) ** 2))
         if rms < silence_threshold:  # skip if too quiet
-            print("Skipped silent chunk (RMS:", rms, ")")
+            self.time_counter = time.time() - self.time_stamp
             return
-        print("Not silent chunk (RMS:", rms, ")")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmpfile:
             with wave.open(tmpfile.name, "wb") as wf:
                 wf.setnchannels(self.channels)
@@ -78,13 +107,13 @@ class RecorderHandler:
                 print("Chunk text:", response.text)
 
         if self.transcribe:
-            output_file, duration = fetch_audio(self.transcribe)
+            output_file = self.fetch_audio_path(self.transcribe)
+            print(output_file)
             self.transcribe = None
             if output_file:
                 self.run_stt = False
                 playsound(output_file)
-                time.sleep((duration / 1000) + 0.2)
-                os.remove(output_file)
+                time.sleep(1)
                 self.run_stt = True
             else:
                 print("Sentence not found in SRT")
