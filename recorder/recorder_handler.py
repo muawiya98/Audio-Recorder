@@ -59,30 +59,25 @@ class RecorderHandler:
     def fetch_audio_path(self, transcribe):
         words = transcribe.split()
         old_index = self.last_word_index
-        for w in words:
-            for ind, word in enumerate(self.words[self.last_word_index :]):
-                if w == word:
+        for i in range(0, len(words)):
+            for ind in range(self.last_word_index, len(self.words)):
+                if words[i] in self.words[ind]:
                     old_index = ind
                     break
-        if old_index == self.last_word_index or old_index < (
-            self.last_word_index + len(words)
-        ):
-            self.last_word_index = old_index
-            return self.paths[old_index]
-        return None
+        self.last_word_index = old_index
+        # if old_index == self.last_word_index or old_index < (
+        #     self.last_word_index + (len(words) // 2)
+        # ):
+        #     return self.paths[old_index]
+        # return None
 
     def transcribe_chunk(self, chunk, silence_threshold=50):
         pcm16 = (chunk * 32767).astype(np.int16)
-
-        # Check if chunk is silence
-        if self.time_counter > 7:
-            word_path = self.paths[self.last_word_index]
-            playsound(word_path)
-            time.sleep(1)
+        if self.time_counter > 12:
             word_path = self.paths[self.last_word_index + 1]
+            self.time_counter = 0
             playsound(word_path)
             time.sleep(1)
-            self.time_counter = 0
             self.time_stamp = time.time()
 
         rms = np.sqrt(np.mean(pcm16.astype(np.float32) ** 2))
@@ -97,7 +92,6 @@ class RecorderHandler:
                 wf.writeframes(pcm16.tobytes())
             tmp_path = tmpfile.name
 
-        # Transcribe with OpenAI Whisper
         if self.run_stt:
             with open(tmp_path, "rb") as audio_file:
                 response = self.client.audio.transcriptions.create(
@@ -107,13 +101,14 @@ class RecorderHandler:
                 print("Chunk text:", response.text)
 
         if self.transcribe:
-            output_file = self.fetch_audio_path(self.transcribe)
+            # output_file =
+            self.fetch_audio_path(self.transcribe)
             self.transcribe = None
-            if output_file:
-                self.run_stt = False
-                playsound(output_file)
-                time.sleep(1)
-                self.run_stt = True
+            # if output_file:
+            #     self.run_stt = False
+            # playsound(output_file)
+            # time.sleep(1)
+            # self.run_stt = True
 
     def start_recording(self):
         if self.is_recording:

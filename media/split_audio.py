@@ -23,14 +23,24 @@ def split_audio_by_srt(
     os.makedirs(output_dir, exist_ok=True)
     metadata = {}
 
-    for i, sub in enumerate(subs, start=1):
-        start_ms = srt_to_ms(sub.start)
-        end_ms = srt_to_ms(sub.end)
+    for i in range(0, len(subs), 2):
+        sub1 = subs[i]
+        if i + 1 < len(subs):
+            sub2 = subs[i + 1]
+        else:
+            sub2 = sub1
+
+        start_ms = srt_to_ms(sub1.start)
+        end_ms = srt_to_ms(sub2.end)
+
         chunk = audio[start_ms:end_ms]
-        chunk_filename = os.path.join(output_dir, f"chunk_{i:03d}.mp3")
-        chunk.export(chunk_filename.replace(".wav", ".mp3"), format="mp3")
-        key = sub.text.strip()
-        metadata[i] = [key, chunk_filename]
+
+        chunk_filename = os.path.join(output_dir, f"chunk_{(i // 2) + 1:03d}.mp3")
+        chunk.export(chunk_filename, format="mp3")
+
+        key = (sub1.text + " " + sub2.text).strip()
+        metadata[(i // 2) + 1] = [key, chunk_filename]
+
         # print(f"Saved: {chunk_filename} ({sub.text})")
 
     with open(json_path, "w", encoding="utf-8") as f:
@@ -40,10 +50,10 @@ def split_audio_by_srt(
 
 
 if __name__ == "__main__":
-    audio_path = os.path.join(STORAGE_PATH, '096.mp3')
-    srt_surah = os.path.join(STORAGE_PATH, '096_words.srt')
-    output_dir = os.path.join(STORAGE_PATH, 'chunk')
-    json_path = os.path.join(STORAGE_PATH, 'chunks.json')
+    audio_path = os.path.join(STORAGE_PATH, "096.mp3")
+    srt_surah = os.path.join(STORAGE_PATH, "096_words.srt")
+    output_dir = os.path.join(STORAGE_PATH, "chunk")
+    json_path = os.path.join(STORAGE_PATH, "chunks.json")
     split_audio_by_srt(
         audio_path=audio_path,
         srt_path=srt_surah,
