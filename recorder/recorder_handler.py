@@ -73,7 +73,7 @@ class RecorderHandler:
 
     def transcribe_chunk(self, chunk, silence_threshold=50):
         pcm16 = (chunk * 32767).astype(np.int16)
-        if self.time_counter > 12:
+        if self.time_counter > 7:
             word_path = self.paths[self.last_word_index + 1]
             self.time_counter = 0
             playsound(word_path)
